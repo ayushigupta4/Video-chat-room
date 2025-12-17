@@ -1,30 +1,93 @@
-const express = require("express");
 const http = require("http");
-const { Server } = require("socket.io");
-const cors = require("cors");
+const WebSocket = require("ws");
 
-const app = express();
-app.use(cors());
+const server = http.createServer();
+const wss = new WebSocket.Server({ server });
 
-const server = http.createServer(app);
+const rooms = {};
 
-const io = new Server(server, {
-    cors: {
-        origin: "*",
-    }
-});
+function generateId() {
+    return Math.random().toString(36).substring(2, 10);
+}
 
-io.on("connection", (socket) => {
-    console.log("New user connected:", socket.id);
+wss.on("connection", (ws) => {
+    ws.id = generateId();
+    ws.roomId = null;
+    
+    ws.on("message", (message) => {
+        let data = JSON.parse(message);
 
-    socket.on("disconnect", () => {
-        console.log("User disconnected:", socket.id);
+        switch (data.type) {
+            case "join-room":
+                handleJonRoom(ws, data.roomId);
+                break;
+
+            case "offer":
+            case "answer":
+            case "ice-candidate":
+                relayToRoom(ws, data);
+                break;
+
+            case "user-left":
+                handleUserLeft(ws);
+                break;
+        }
     });
+
+    ws.on("close", () => {
+        handleUserLeft(ws);
+    })
 });
 
-app.get("/", (req, res) => {
-    res.send("Signaling server is running");
-})
+function handleJoinRoom(ws, roomId) {
+    ws.roomId = roomId;
+
+    if(!rooms[roomId]) rooms[roomId] = {};
+
+    rooms[roomId][ws.id] = ws;
+
+    console.log(`User ${ws.id} joined room ${roomId}`);
+
+    broadcast(roomId, {
+        type: "new-use",
+        userId: ws.id,
+    }, ws);
+}
+
+function relayToRoom(sender, data) {
+    const room = rooms[sender.roomId];
+    if (!room) return;
+
+    Object.values(room).forEach((client) => {
+        if(client !== sender) {
+            client.send(JSON.stringify({
+                        ...data,
+                        senderId: sender.id
+            }));
+        }
+    });
+}
+
+function handleUserLeft(ws) {
+    if (!ws.roomId || !rooms[ws.roomId]) return;
+
+    delete rooms[ws.roomId][ws.id];
+
+    broadcast(ws.roomId, {
+        type: "user-left",
+        userId: ws.id
+    });
+
+    console.log(`User ${ws.id} left room {ws.roomId}`);
+}
+
+function broadcast(roomId, data, exclude = null) {
+    Object.values(rooms[roomId] || {}).forEach((client) => {
+        if(client !== exclude) {
+            client.send(JSON.stringify(data));
+        }
+    });
+}
 
 const PORT = 3001;
 server.listen(PORT, () => console.log(`Server listening on port ${PORT}`));
