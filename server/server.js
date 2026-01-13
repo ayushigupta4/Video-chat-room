@@ -19,7 +19,7 @@ wss.on("connection", (ws) => {
 
         switch (data.type) {
             case "join-room":
-                handleJonRoom(ws, data.roomId);
+                handleJoinRoom(ws, data.roomId);
                 break;
 
             case "offer":
@@ -49,14 +49,27 @@ function handleJoinRoom(ws, roomId) {
     console.log(`User ${ws.id} joined room ${roomId}`);
 
     broadcast(roomId, {
-        type: "new-use",
+        type: "new-user",
         userId: ws.id,
     }, ws);
+
+    ws.send(JSON.stringify({
+        type: "existing-users",
+        users: Object.keys(rooms[roomId]).filter(id => id !== ws.id),
+    }));
 }
 
 function relayToRoom(sender, data) {
     const room = rooms[sender.roomId];
     if (!room) return;
+
+    const target = room[data.targetId];
+    if (!target) return;
+
+    target.send(JSON.stringify({
+        ...data,
+        senderId: sender.id
+    }));
 
     Object.values(room).forEach((client) => {
         if(client !== sender) {
@@ -78,7 +91,7 @@ function handleUserLeft(ws) {
         userId: ws.id
     });
 
-    console.log(`User ${ws.id} left room {ws.roomId}`);
+    console.log(`User ${ws.id} left room ${ws.roomId}`);
 }
 
 function broadcast(roomId, data, exclude = null) {
