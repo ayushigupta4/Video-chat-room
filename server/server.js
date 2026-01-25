@@ -4,103 +4,35 @@ const WebSocket = require("ws");
 const server = http.createServer();
 const wss = new WebSocket.Server({ server });
 
-const rooms = {};
-
-function generateId() {
-    return Math.random().toString(36).substring(2, 10);
-}
+let users = []; // max 2 users
 
 wss.on("connection", (ws) => {
-    ws.id = generateId();
-    ws.roomId = null;
-    
-    ws.on("message", (message) => {
-        let data = JSON.parse(message);
+  console.log("User connected");
 
-        switch (data.type) {
-            case "join-room":
-                handleJoinRoom(ws, data.roomId);
-                break;
+  users.push(ws);
 
-            case "offer":
-            case "answer":
-            case "ice-candidate":
-                relayToRoom(ws, data);
-                break;
+  // Tell second user to start the call
+  if (users.length === 2) {
+    users[1].send(JSON.stringify({ type: "start-call" }));
+  }
 
-            case "user-left":
-                handleUserLeft(ws);
-                break;
-        }
+  ws.on("message", (message) => {
+    const data = JSON.parse(message);
+
+    // Relay message to the OTHER user
+    users.forEach((user) => {
+      if (user !== ws) {
+        user.send(JSON.stringify(data));
+      }
     });
+  });
 
-    ws.on("close", () => {
-        handleUserLeft(ws);
-    })
+  ws.on("close", () => {
+    console.log("User disconnected");
+    users = users.filter((u) => u !== ws);
+  });
 });
 
-function handleJoinRoom(ws, roomId) {
-    ws.roomId = roomId;
-
-    if(!rooms[roomId]) rooms[roomId] = {};
-
-    rooms[roomId][ws.id] = ws;
-
-    console.log(`User ${ws.id} joined room ${roomId}`);
-
-    broadcast(roomId, {
-        type: "new-user",
-        userId: ws.id,
-    }, ws);
-
-    ws.send(JSON.stringify({
-        type: "existing-users",
-        users: Object.keys(rooms[roomId]).filter(id => id !== ws.id),
-    }));
-}
-
-function relayToRoom(sender, data) {
-    const room = rooms[sender.roomId];
-    if (!room) return;
-
-    const target = room[data.targetId];
-    if (!target) return;
-
-    target.send(JSON.stringify({
-        ...data,
-        senderId: sender.id
-    }));
-
-    Object.values(room).forEach((client) => {
-        if(client !== sender) {
-            client.send(JSON.stringify({
-                        ...data,
-                        senderId: sender.id
-            }));
-        }
-    });
-}
-
-function handleUserLeft(ws) {
-    if (!ws.roomId || !rooms[ws.roomId]) return;
-
-    delete rooms[ws.roomId][ws.id];
-
-    broadcast(ws.roomId, {
-        type: "user-left",
-        userId: ws.id
-    });
-
-    console.log(`User ${ws.id} left room ${ws.roomId}`);
-}
-
-function broadcast(roomId, data, exclude = null) {
-    Object.values(rooms[roomId] || {}).forEach((client) => {
-        if(client !== exclude) {
-            client.send(JSON.stringify(data));
-        }
-    });
-}
-
-const PORT = 3001;
-server.listen(PORT, () => console.log(`Server listening on port ${PORT}`));
+server.listen(3001, () =>
+  console.log("Server listening on port 3001")
+);
