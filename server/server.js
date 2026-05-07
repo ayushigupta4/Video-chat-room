@@ -17,7 +17,8 @@ wss.on("connection", (ws) => {
   }
 
   ws.on("message", (message) => {
-    const data = JSON.parse(message);
+    let data;
+    try { data = JSON.parse(message); } catch { return; }
 
     // Relay message to the OTHER user
     users.forEach((user) => {
