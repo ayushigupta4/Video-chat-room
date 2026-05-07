@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import "./App.css";
 
 function App() {
   const localVideo = useRef(null);
@@ -11,6 +12,8 @@ function App() {
   const remoteDescSet = useRef(false);
 
   const [joined, setJoined] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
+  const [isVideoOff, setIsVideoOff] = useState(false);
   const [messages, setMessages] = useState([]);
   const [chatInput, setChatInput] = useState("");
 
@@ -138,51 +141,80 @@ function App() {
     setChatInput("");
   }
 
+  function toggleMute() {
+    const audioTrack = streamRef.current?.getAudioTracks()[0];
+    if (!audioTrack) return;
+    audioTrack.enabled = !audioTrack.enabled;
+    setIsMuted(!audioTrack.enabled);
+  }
+
+  function toggleVideo() {
+    const videoTrack = streamRef.current?.getVideoTracks()[0];
+    if (!videoTrack) return;
+    videoTrack.enabled = !videoTrack.enabled;
+    setIsVideoOff(!videoTrack.enabled);
+  }
+
   function handleKeyDown(e) {
     if (e.key === "Enter") sendMessage();
   }
 
   return (
-    <div style={{ textAlign: "center" }}>
-      <h2>2-User Video Chat</h2>
+    <div className="app">
+      {/* Video area */}
+      <div className="video-area">
+        <video ref={remoteVideo} autoPlay playsInline className="remote-video" />
+        <video ref={localVideo} autoPlay muted playsInline className="local-video" />
 
-      <div>
-        <video ref={localVideo} autoPlay muted playsInline width="300" />
-        <video ref={remoteVideo} autoPlay playsInline width="300" />
+        <div className="controls">
+          {!joined ? (
+            <button className="btn btn-join" onClick={startCall}>Join Call</button>
+          ) : (
+            <>
+              <button
+                className={`btn btn-mute${isMuted ? " btn-active" : ""}`}
+                onClick={toggleMute}
+              >
+                {isMuted ? "Unmute" : "Mute"}
+              </button>
+              <button
+                className={`btn btn-video${isVideoOff ? " btn-active" : ""}`}
+                onClick={toggleVideo}
+              >
+                {isVideoOff ? "Start Video" : "Stop Video"}
+              </button>
+              <button className="btn btn-leave" onClick={leaveCall}>Leave Call</button>
+            </>
+          )}
+        </div>
       </div>
 
-      {!joined ? (
-        <button onClick={startCall}>Join Call</button>
-      ) : (
-        <button onClick={leaveCall}>Leave Call</button>
-      )}
-
+      {/* Chat panel */}
       {joined && (
-        <div style={{ marginTop: "20px", maxWidth: "400px", margin: "20px auto" }}>
-          <div
-            style={{
-              height: "200px",
-              overflowY: "auto",
-              border: "1px solid #ccc",
-              padding: "8px",
-              textAlign: "left",
-              marginBottom: "8px",
-            }}
-          >
+        <div className="chat-panel">
+          <div className="chat-messages">
+            {messages.length === 0 && (
+              <span className="chat-empty">No messages yet...</span>
+            )}
             {messages.map((msg, i) => (
-              <div key={i} style={{ marginBottom: "4px" }}>
-                <strong>{msg.from === "me" ? "Me" : "Them"}:</strong> {msg.text}
+              <div key={i} className="chat-message">
+                <strong className={msg.from === "me" ? "chat-me" : "chat-them"}>
+                  {msg.from === "me" ? "Me" : "Them"}:
+                </strong>{" "}
+                {msg.text}
               </div>
             ))}
           </div>
-          <input
-            value={chatInput}
-            onChange={(e) => setChatInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Type a message..."
-            style={{ width: "75%", marginRight: "8px" }}
-          />
-          <button onClick={sendMessage}>Send</button>
+          <div className="chat-input-row">
+            <input
+              className="chat-input"
+              value={chatInput}
+              onChange={(e) => setChatInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Type a message..."
+            />
+            <button className="btn btn-send" onClick={sendMessage}>Send</button>
+          </div>
         </div>
       )}
     </div>
