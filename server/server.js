@@ -1,17 +1,27 @@
 const http = require("http");
 const WebSocket = require("ws");
+const express = require("express");
+const path = require("path");
 
-const server = http.createServer();
+const app = express();
+
+// Serve the React build that the Dockerfile copies into ./public
+app.use(express.static(path.join(__dirname, "public")));
+
+// SPA fallback — any unknown route serves index.html so React Router works
+app.get("/*splat", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "index.html"));
+});
+
+const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
-let users = []; // max 2 users
+let users = [];
 
 wss.on("connection", (ws) => {
   console.log("User connected");
-
   users.push(ws);
 
-  // Tell second user to start the call
   if (users.length === 2) {
     users[1].send(JSON.stringify({ type: "start-call" }));
   }
@@ -20,11 +30,8 @@ wss.on("connection", (ws) => {
     let data;
     try { data = JSON.parse(message); } catch { return; }
 
-    // Relay message to the OTHER user
     users.forEach((user) => {
-      if (user !== ws) {
-        user.send(JSON.stringify(data));
-      }
+      if (user !== ws) user.send(JSON.stringify(data));
     });
   });
 
@@ -34,6 +41,5 @@ wss.on("connection", (ws) => {
   });
 });
 
-server.listen(3001, () =>
-  console.log("Server listening on port 3001")
-);
+const PORT = process.env.PORT || 3001;
+server.listen(PORT, () => console.log(`Server listening on port ${PORT}`));

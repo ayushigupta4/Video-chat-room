@@ -50,7 +50,9 @@ function App() {
       remoteVideo.current.srcObject = event.streams[0];
     };
 
-    const socket = new WebSocket("ws://localhost:3001");
+    const wsUrl = process.env.REACT_APP_WS_URL ||
+      `${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.host}`;
+    const socket = new WebSocket(wsUrl);
     socketRef.current = socket;
 
     socket.onopen = () => {
